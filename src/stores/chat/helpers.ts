@@ -23,6 +23,12 @@ let _historyPollTimer: ReturnType<typeof setTimeout> | null = null;
 // before committing the error to give the recovery path a chance.
 let _errorRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Track the last run ID that was explicitly aborted by the user.
+// Prevents lingering Gateway events from the aborted run from re-arming
+// the sending state after abortRun clears it.
+let _lastAbortedRunId: string | null = null;
+const _blockedRunEvents = new Map<string, Record<string, unknown>[]>();
+
 function clearErrorRecoveryTimer(): void {
   if (_errorRecoveryTimer) {
     clearTimeout(_errorRecoveryTimer);
@@ -1020,6 +1026,27 @@ function getLastChatEventAt(): number {
   return _lastChatEventAt;
 }
 
+function setLastAbortedRunId(id: string | null): void {
+  _lastAbortedRunId = id;
+}
+
+function getLastAbortedRunId(): string | null {
+  return _lastAbortedRunId;
+}
+
+function queueBlockedRunEvent(runId: string, event: Record<string, unknown>): void {
+  const events = _blockedRunEvents.get(runId) ?? [];
+  events.push({ ...event });
+  if (events.length > 100) events.shift();
+  _blockedRunEvents.set(runId, events);
+}
+
+function takeBlockedRunEvents(runId: string): Record<string, unknown>[] {
+  const events = _blockedRunEvents.get(runId) ?? [];
+  _blockedRunEvents.delete(runId);
+  return events;
+}
+
 export {
   toMs,
   clearErrorRecoveryTimer,
@@ -1050,4 +1077,8 @@ export {
   setErrorRecoveryTimer,
   setLastChatEventAt,
   getLastChatEventAt,
+  setLastAbortedRunId,
+  getLastAbortedRunId,
+  queueBlockedRunEvent,
+  takeBlockedRunEvents,
 };
